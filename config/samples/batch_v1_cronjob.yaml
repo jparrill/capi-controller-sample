@@ -1,0 +1,12 @@
+apiVersion: batch.capi-sample.kerbeross.com/v1
+kind: CronJob
+metadata:
+  labels:
+    app.kubernetes.io/name: cronjob
+    app.kubernetes.io/instance: cronjob-sample
+    app.kubernetes.io/part-of: capi-sample
+    app.kubernetes.io/managed-by: kustomize
+    app.kubernetes.io/created-by: capi-sample
+  name: cronjob-sample
+spec:
+  # TODO(user): Add fields here
