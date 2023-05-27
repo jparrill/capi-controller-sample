@@ -1,5 +1,5 @@
-# capi-sample
-// TODO(user): Add simple overview of use/purpose
+# capi-controller-sample
+CAPI Controller based in kubebuilder implementation for learning purposes.
 
 ## Description
 // TODO(user): An in-depth paragraph about your project and overview of use
