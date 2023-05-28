@@ -20,6 +20,7 @@ import (
 	"context"
 	"time"
 
+	kbatch "k8s.io/api/batch/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -65,12 +66,32 @@ var (
 // For more details, check Reconcile and its Result here:
 // - https://pkg.go.dev/sigs.k8s.io/controller-runtime@v0.14.4/pkg/reconcile
 func (r *CronJobReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
-	log := log.FromContext(ctx)
-	var cronJob = &batchv1.CronJob{}
+	var (
+		activeJobs     []*kbatch.Job
+		sucessfullJobs []*kbatch.Job
+		faildedJobs    []*kbatch.Job
+		mostRecentTime *time.Time
+	)
 
-	if err := r.Get(ctx, req.NamespacedName, cronJob); err != nil {
-		log.Error(err, "unable to fetch CronJob")
-		return ctrl.Result{}, client.IgnoreNotFound(err)
+	log := log.FromContext(ctx)
+
+	// Load CronJob by name
+	{
+		var cronJob = &batchv1.CronJob{}
+		if err := r.Get(ctx, req.NamespacedName, cronJob); err != nil {
+			log.Error(err, "unable to fetch CronJob")
+			return ctrl.Result{}, client.IgnoreNotFound(err)
+		}
+	}
+
+	// List Jobs and update status
+	{
+		joblist := &batchv1.CronJobList{}
+		if err := r.List(ctx, joblist, client.InNamespace(req.Namespace), client.MatchingFields{jobOwnerKey: req.Name}); err != nil {
+			log.Error(err, "unable to list child Jobs")
+			return ctrl.Result{}, err
+		}
+
 	}
 
 	return ctrl.Result{}, nil
@@ -81,4 +102,27 @@ func (r *CronJobReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	return ctrl.NewControllerManagedBy(mgr).
 		For(&batchv1.CronJob{}).
 		Complete(r)
+}
+
+func getScheduledTimeForJob(job *kbatch.Job) (*time.Time, error) {
+	timeRaw := job.Annotations[scheduledTimeAnnotation]
+	if len(timeRaw) == 0 {
+		return nil, nil
+	}
+
+	timeParsed, err := time.Parse(time.RFC3339, timeRaw)
+	if err != nil {
+		return nil, err
+	}
+	return &timeParsed, nil
+}
+
+func isJobFinished(job *kbatch.Job) (bool, kbatch.JobConditionType) {
+	for _, c := range job.Status.Conditions {
+		if (c.Type == kbatch.JobComplete || c.Type == kbatch.JobFailed) && c.Status == corev1.ConditionTrue {
+			return true, c.Type
+		}
+	}
+
+	return false, ""
 }
